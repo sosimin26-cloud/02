@@ -10,7 +10,7 @@ const COLORS_STEPS = [8, 16, 32, 64, 128, 256];
 const SEG_COLORS = ['#3dd6b0', '#f5b942', '#ff7eb6', '#5b8cff', '#b48cff', '#7ee0ff', '#ff9f5b', '#a3e05b'];
 const STEP = 1 / 30; // 화살표 1프레임 이동 단위
 
-const DEFAULTS = { width: 480, fps: 12, speed: 1, colorsIdx: 5, palette: 'global', repeat: '0', optimize: true, mode: 'each', limitMB: 10 };
+const DEFAULTS = { width: 480, fps: 12, speed: 1, colorsIdx: 5, palette: 'global', repeat: '0', optimize: true, dither: false, mode: 'each', limitMB: 10 };
 
 const S = {
   file: null, url: null, base: 'gif', duration: 0, vw: 0, vh: 0,
@@ -61,6 +61,7 @@ function settings() {
     palette: $('palette').value,
     repeat: +$('repeat').value,
     optimize: $('optimize').checked,
+    dither: $('dither').checked,
     mode: $('mode').value,
   };
 }
@@ -162,6 +163,40 @@ function concatFrames(frames) {
   let o = 0; for (const f of frames) { out.set(f, o); o += f.length; }
   return out;
 }
+/* 플로이드-스타인버그 디더링: 256색 한계로 생기는 계단(밴딩)을 점묘로 부드럽게 */
+function ditherIndex(rgba, palette, w, h) {
+  const n = w * h, out = new Uint8Array(n), buf = new Float32Array(n * 3);
+  for (let i = 0, j = 0; i < n; i++, j += 4) { buf[i * 3] = rgba[j]; buf[i * 3 + 1] = rgba[j + 1]; buf[i * 3 + 2] = rgba[j + 2]; }
+  const cache = new Int16Array(1 << 18).fill(-1), P = palette.length;
+  const pr = new Float32Array(P), pg = new Float32Array(P), pb = new Float32Array(P);
+  palette.forEach((c, i) => { pr[i] = c[0]; pg[i] = c[1]; pb[i] = c[2]; });
+  const spread = (k, er, eg, eb, f) => { buf[k] += er * f; buf[k + 1] += eg * f; buf[k + 2] += eb * f; };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, k = i * 3;
+      const r = Math.min(255, Math.max(0, buf[k])), g = Math.min(255, Math.max(0, buf[k + 1])), b = Math.min(255, Math.max(0, buf[k + 2]));
+      const key = ((r >> 2) << 12) | ((g >> 2) << 6) | (b >> 2);
+      let best = cache[key];
+      if (best < 0) {
+        let bd = Infinity;
+        for (let p = 0; p < P; p++) { const dr = r - pr[p], dg = g - pg[p], db = b - pb[p], d = dr * dr * 2 + dg * dg * 4 + db * db * 3; if (d < bd) { bd = d; best = p; } }
+        cache[key] = best;
+      }
+      out[i] = best;
+      const er = r - pr[best], eg = g - pg[best], eb = b - pb[best];
+      if (x + 1 < w) spread(k + 3, er, eg, eb, 7 / 16);
+      if (y + 1 < h) {
+        if (x > 0) spread(k + w * 3 - 3, er, eg, eb, 3 / 16);
+        spread(k + w * 3, er, eg, eb, 5 / 16);
+        if (x + 1 < w) spread(k + w * 3 + 3, er, eg, eb, 1 / 16);
+      }
+    }
+  }
+  return out;
+}
+function toIndex(rgba, palette, st, w, h) {
+  return st.dither ? ditherIndex(rgba, palette, w, h) : applyPalette(rgba, palette, 'rgb565');
+}
 function makeWriter(st, w, h, palette) {
   const gif = GIFEncoder();
   const delay = 1000 / st.fps;
@@ -174,7 +209,7 @@ function makeWriter(st, w, h, palette) {
     add(rgba) {
       const before = gif.bytesView().length;
       if (useGlobal) {
-        const idx = applyPalette(rgba, opt ? palette.slice(0, -1) : palette, 'rgb565');
+        const idx = toIndex(rgba, opt ? palette.slice(0, -1) : palette, st, w, h);
         const o = { delay, dispose: opt ? 1 : -1 };
         if (first) { o.palette = palette; o.repeat = st.repeat; }
         if (opt && prev) {
@@ -186,7 +221,7 @@ function makeWriter(st, w, h, palette) {
         prev = idx;
       } else {
         const pal = quantize(rgba, st.colors, { format: 'rgb565' });
-        const idx = applyPalette(rgba, pal, 'rgb565');
+        const idx = toIndex(rgba, pal, st, w, h);
         const o = { palette: pal, delay };
         if (first) o.repeat = st.repeat;
         gif.writeFrame(idx, w, h, o);
@@ -821,7 +856,7 @@ const showVal = () => {
   $('optimize').disabled = $('palette').value !== 'global' || S.busy;
 };
 ['fps', 'speed', 'colors'].forEach((id) => { $(id).oninput = () => { showVal(); renderSegRows(); renderStatus(); }; $(id).onchange = () => { showVal(); onSettingsChanged(); saveSettings(); }; });
-['palette', 'repeat', 'optimize', 'mode'].forEach((id) => ($(id).onchange = () => { showVal(); onSettingsChanged(); saveSettings(); }));
+['palette', 'repeat', 'optimize', 'dither', 'mode'].forEach((id) => ($(id).onchange = () => { showVal(); onSettingsChanged(); saveSettings(); }));
 $('limitMB').onchange = () => { renderSegRows(); renderStatus(); renderResults(); saveSettings(); };
 $('resetSettings').onclick = () => { applySettings(DEFAULTS); if (S.duration) setOutW(Math.min(S.vw, DEFAULTS.width)); saveSettings(); };
 
@@ -829,13 +864,13 @@ function saveSettings() {
   try {
     localStorage.setItem('gifmaker.settings', JSON.stringify({
       width: S.outW, fps: +$('fps').value, speed: +$('speed').value, colorsIdx: +$('colors').value, palette: $('palette').value,
-      repeat: $('repeat').value, optimize: $('optimize').checked, mode: $('mode').value, limitMB: +$('limitMB').value,
+      repeat: $('repeat').value, optimize: $('optimize').checked, dither: $('dither').checked, mode: $('mode').value, limitMB: +$('limitMB').value,
     }));
   } catch (e) { /* 저장 불가 환경이면 무시 */ }
 }
 function applySettings(o) {
   $('fps').value = o.fps; $('speed').value = o.speed; $('colors').value = o.colorsIdx; $('palette').value = o.palette;
-  $('repeat').value = o.repeat; $('optimize').checked = o.optimize; $('mode').value = o.mode; $('limitMB').value = o.limitMB;
+  $('repeat').value = o.repeat; $('optimize').checked = o.optimize; $('dither').checked = !!o.dither; $('mode').value = o.mode; $('limitMB').value = o.limitMB;
   $('outW').dataset.pref = o.width;
   showVal(); onSettingsChanged();
 }

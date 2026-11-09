@@ -176,3 +176,5 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-bottom-wi
   #video { max-height: 50vh; }
   .topbar { flex-wrap: wrap; height: auto; padding: 6px 12px; }
 }
+
+.field.checks { display: flex; flex-direction: column; gap: 7px; }
