@@ -18,7 +18,7 @@
     </label>
     <span id="fileName" class="muted">영상을 열거나 화면에 끌어다 놓으세요</span>
     <div class="spacer"></div>
-    <button class="btn ghost" id="helpBtn">⌨ 단축키</button>
+    <button class="btn ghost" id="helpBtn">⌨ 단축키 설정</button>
     <button class="btn primary" id="buildAllBtn" disabled>⚡ 선택 구간 전부 GIF 만들기</button>
   </header>
 
@@ -196,21 +196,12 @@
 
 <div class="modal" id="helpModal" hidden>
   <div class="modal-box">
-    <h3>단축키</h3>
-    <table class="keys">
-      <tr><td><kbd>Space</kbd></td><td>재생 / 정지</td></tr>
-      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (Shift: 1초)</td></tr>
-      <tr><td><kbd>I</kbd> / <kbd>O</kbd></td><td>시작점 / 끝점 표시</td></tr>
-      <tr><td><kbd>Enter</kbd></td><td>표시한 범위로 구간 추가</td></tr>
-      <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>선택 구간의 시작 / 끝을 현재 위치로</td></tr>
-      <tr><td><kbd>Delete</kbd></td><td>선택 구간 삭제</td></tr>
-      <tr><td><kbd>Tab</kbd></td><td>다음 구간 선택</td></tr>
-      <tr><td><kbd>L</kbd></td><td>구간 반복 재생 켜기/끄기</td></tr>
-      <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>구간(또는 영상) 처음 / 끝</td></tr>
-      <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>체크된 구간 전부 GIF 만들기</td></tr>
-    </table>
-    <p class="muted">타임라인: 빈 곳 클릭 = 이동, 구간 끌기 = 위치 이동, 구간 양 끝 끌기 = 길이 조절, Alt+드래그 = 새 구간 그리기</p>
-    <button class="btn" id="helpClose">닫기</button>
+    <h3>단축키 <span class="muted" style="font-size:12px;font-weight:400">— 바꾸고 싶은 동작의 <b>바꾸기</b>를 누르고 원하는 키를 누르세요</span></h3>
+    <div class="keys-wrap"><table class="keys"><tbody id="keyRows"></tbody></table></div>
+    <p class="muted">한 동작에 키 2개까지. 이미 쓰는 키를 지정하면 원래 동작에서 빠지고 옮겨져요. 한글 입력 상태에서도 그대로 동작해요.<br>
+    타임라인: 빈 곳 클릭 = 이동 · <b>구간 줄 빈 곳 드래그 = 새 구간 그리기</b> (Alt+드래그는 썸네일·눈금 위에서도 가능) · 구간 끌기 = 이동 · 구간 양 끝 끌기 = 길이 조절</p>
+    <div class="row" style="justify-content:space-between"><button class="btn ghost" id="keysReset">기본값으로</button>
+    <button class="btn" id="helpClose">닫기</button></div>
   </div>
 </div>
 

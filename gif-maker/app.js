@@ -656,7 +656,7 @@ function renderSegBlocks() {
 }
 function renderMarks() {
   const mr = $('markRange'), info = $('markInfo');
-  if (S.markIn == null && S.markOut == null) { mr.hidden = true; info.textContent = '시작 I · 끝 O 로 범위를 찍고 Enter로 구간 추가 (Alt+드래그로 바로 그리기)'; return; }
+  if (S.markIn == null && S.markOut == null) { mr.hidden = true; info.textContent = '시작·끝 키로 범위를 찍고 구간 추가 — 또는 아래 구간 줄 빈 곳을 드래그해서 바로 그리기'; return; }
   const a = S.markIn ?? 0, b = S.markOut ?? Math.min(S.duration, a + 3);
   mr.hidden = false;
   mr.style.left = Math.min(a, b) * pps() + 'px'; mr.style.width = Math.abs(b - a) * pps() + 'px';
@@ -699,12 +699,17 @@ tlInner.addEventListener('pointerdown', (e) => {
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); if (changed) segChanged(s); else seekTo(t0); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
-  } else if (e.altKey && e.target.closest('#segTrack') && !S.busy) {
-    const t0 = tAt(e);
-    S.markIn = t0; S.markOut = t0; renderMarks();
-    move = (ev) => { S.markOut = tAt(ev); renderMarks(); };
+  } else if ((e.altKey || e.target.closest('#segTrack')) && !S.busy) {
+    // 구간 줄 빈 곳을 드래그하거나, 타임라인 어디서든 Alt+드래그 → 새 구간 그리기 (그냥 클릭은 이동)
+    const t0 = tAt(e), x0 = e.clientX;
+    let drawing = false;
+    move = (ev) => {
+      if (!drawing && Math.abs(ev.clientX - x0) < 5) return;
+      drawing = true; S.markIn = t0; S.markOut = tAt(ev); renderMarks();
+    };
     const up = () => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      if (!drawing) { video.pause(); seekTo(t0); return; }
       if (Math.abs(S.markOut - S.markIn) >= 0.1) addSeg(S.markIn, S.markOut); else { S.markIn = S.markOut = null; renderMarks(); }
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
@@ -878,31 +883,100 @@ try { const saved = JSON.parse(localStorage.getItem('gifmaker.settings') || 'nul
 catch (e) { applySettings(DEFAULTS); }
 $('outW').addEventListener('change', saveSettings);
 
-/* 단축키 */
+/* 단축키 — 물리 키(e.code) 기준이라 한글 입력 상태에서도 동작, 직접 바꿀 수 있음 */
+const ACTIONS = [
+  { id: 'play', name: '재생 / 정지', keys: ['Space'], run: () => togglePlay() },
+  { id: 'stepBack', name: '1프레임 뒤로', keys: ['ArrowLeft'], run: () => step(-STEP) },
+  { id: 'stepFwd', name: '1프레임 앞으로', keys: ['ArrowRight'], run: () => step(STEP) },
+  { id: 'back1s', name: '1초 뒤로', keys: ['Shift+ArrowLeft'], run: () => step(-1) },
+  { id: 'fwd1s', name: '1초 앞으로', keys: ['Shift+ArrowRight'], run: () => step(1) },
+  { id: 'markIn', name: '시작점 표시', keys: ['KeyI'], run: () => markIn() },
+  { id: 'markOut', name: '끝점 표시', keys: ['KeyO'], run: () => markOut() },
+  { id: 'addSeg', name: '표시한 범위로 구간 추가', keys: ['Enter', 'NumpadEnter'], run: () => addFromMarks() },
+  { id: 'segIn', name: '선택 구간 시작을 현재 위치로', keys: ['BracketLeft'], run: (s) => s && setSegEdge(s, 'start') },
+  { id: 'segOut', name: '선택 구간 끝을 현재 위치로', keys: ['BracketRight'], run: (s) => s && setSegEdge(s, 'end') },
+  { id: 'nextSeg', name: '다음 구간 선택', keys: ['Tab'], run: () => cycleSeg(1) },
+  { id: 'prevSeg', name: '이전 구간 선택', keys: ['Shift+Tab'], run: () => cycleSeg(-1) },
+  { id: 'delSeg', name: '선택 구간 삭제', keys: ['Delete', 'Backspace'], run: (s) => s && !S.busy && removeSeg(s.id) },
+  { id: 'toggleSeg', name: '선택 구간 체크 켜기/끄기', keys: ['KeyC'], run: (s) => { if (s) { s.on = !s.on; renderSegs(); renderStatus(); } } },
+  { id: 'loop', name: '구간 반복 재생 켜기/끄기', keys: ['KeyL'], run: () => ($('loopSeg').checked = !$('loopSeg').checked) },
+  { id: 'toStart', name: '구간(또는 영상) 처음으로', keys: ['Home'], run: () => toEdge(false) },
+  { id: 'toEnd', name: '구간(또는 영상) 끝으로', keys: ['End'], run: () => toEdge(true) },
+  { id: 'buildSel', name: '선택 구간만 GIF 만들기', keys: ['KeyG'], run: (s) => s && build([s.id]) },
+  { id: 'buildAll', name: '체크된 구간 전부 GIF 만들기', keys: ['Ctrl+Enter'], run: () => $('buildAllBtn').click(), any: true },
+  { id: 'open', name: '영상 열기', keys: ['Ctrl+KeyO'], run: () => $('fileInput').click(), any: true },
+];
+const DEFAULT_KEYS = Object.fromEntries(ACTIONS.map((a) => [a.id, [...a.keys]]));
+try {
+  const saved = JSON.parse(localStorage.getItem('gifmaker.keys') || 'null');
+  if (saved) ACTIONS.forEach((a) => { if (Array.isArray(saved[a.id])) a.keys = saved[a.id]; });
+} catch (e) { /* 무시 */ }
+function saveKeys() { try { localStorage.setItem('gifmaker.keys', JSON.stringify(Object.fromEntries(ACTIONS.map((a) => [a.id, a.keys])))); } catch (e) { /* 무시 */ } }
+function cycleSeg(d) {
+  if (!S.segs.length) return;
+  const i = S.segs.findIndex((x) => x.id === S.sel);
+  selectSeg(S.segs[(i + d + S.segs.length) % S.segs.length].id);
+}
+const MOD_CODES = /^(Control|Shift|Alt|Meta|OS)(Left|Right)?$/;
+function comboOf(e) {
+  if (MOD_CODES.test(e.code) || !e.code) return null;
+  return [(e.ctrlKey || e.metaKey) && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.code].filter(Boolean).join('+');
+}
+const CODE_LABEL = { Space: 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', BracketLeft: '[', BracketRight: ']', Enter: 'Enter', NumpadEnter: '숫자패드 Enter', Backspace: 'Backspace', Delete: 'Delete', Tab: 'Tab', Home: 'Home', End: 'End', PageUp: 'PgUp', PageDown: 'PgDn', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", Minus: '-', Equal: '=', Backquote: '`', Backslash: '\\', Insert: 'Insert' };
+function keyLabel(combo) {
+  return combo.split('+').map((p) => CODE_LABEL[p] || p.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, '숫자패드 ')).map((p) => `<kbd>${escapeHtml(p)}</kbd>`).join('+');
+}
+let capturing = null, capMode = 'replace';
+function plainKey(id) { const k = ACTIONS.find((a) => a.id === id).keys[0]; return k ? keyLabel(k).replace(/<\/?kbd>/g, '') : ''; }
+function renderKeyHints() {
+  $('markInBtn').textContent = `[ 시작 ${plainKey('markIn')}`.trim();
+  $('markOutBtn').textContent = `끝 ${plainKey('markOut')} ]`;
+}
+function renderKeys() {
+  renderKeyHints();
+  const tb = $('keyRows'); tb.innerHTML = '';
+  for (const a of ACTIONS) {
+    const tr = document.createElement('tr');
+    const isCap = capturing && capturing.id === a.id;
+    tr.innerHTML = `<td>${a.name}</td>
+      <td class="kcell">${isCap ? '<span class="cap">누를 키를 입력하세요… (Esc 취소)</span>' : a.keys.length ? a.keys.map(keyLabel).join(' <span class="muted">또는</span> ') : '<span class="muted">없음</span>'}</td>
+      <td class="kacts"><button class="btn sm" data-k="set" title="이 키 하나로 바꾸기">바꾸기</button><button class="btn sm ghost" data-k="add" title="키 하나 더 추가 (최대 2개)">＋ 추가</button><button class="btn sm ghost" data-k="clr" title="이 동작의 키 모두 지우기">지우기</button></td>`;
+    tr.querySelector('[data-k=set]').onclick = () => { capturing = a; capMode = 'replace'; renderKeys(); };
+    tr.querySelector('[data-k=add]').onclick = () => { capturing = a; capMode = 'add'; renderKeys(); };
+    tr.querySelector('[data-k=clr]').onclick = () => { a.keys = []; capturing = null; saveKeys(); renderKeys(); };
+    tb.appendChild(tr);
+  }
+}
+function assignKey(a, combo) {
+  const other = ACTIONS.find((x) => x !== a && x.keys.includes(combo));
+  if (other) { other.keys = other.keys.filter((k) => k !== combo); toast(`"${other.name}"에서 빼서 옮겼어요`); }
+  if (capMode === 'replace') a.keys = [combo];
+  else if (!a.keys.includes(combo)) a.keys = [...a.keys, combo].slice(-2);
+  saveKeys();
+}
+$('keysReset').onclick = () => { ACTIONS.forEach((a) => (a.keys = [...DEFAULT_KEYS[a.id]])); capturing = null; saveKeys(); renderKeys(); toast('기본 단축키로 되돌렸어요'); };
+$('helpBtn').addEventListener('click', () => { capturing = null; renderKeys(); });
+// Windows에서 Alt만 눌렀다 떼면 브라우저 메뉴로 포커스가 가는 것 방지
+window.addEventListener('keyup', (e) => { if (e.key === 'Alt') e.preventDefault(); });
+
 window.addEventListener('keydown', (e) => {
+  if (capturing) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.code === 'Escape') { capturing = null; renderKeys(); return; }
+    const combo = comboOf(e); if (!combo) return;
+    assignKey(capturing, combo); capturing = null; renderKeys(); return;
+  }
   if (e.key === 'Escape') { $('helpModal').hidden = true; document.activeElement?.blur(); return; }
+  if (!$('helpModal').hidden) return;
   const tag = e.target.tagName;
   if ((tag === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range') || tag === 'SELECT' || tag === 'TEXTAREA') return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); $('fileInput').click(); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); $('buildAllBtn').click(); return; }
-  if (!S.duration || e.ctrlKey || e.metaKey) return;
-  const s = selSeg();
-  switch (e.key) {
-    case ' ': e.preventDefault(); togglePlay(); break;
-    case 'ArrowLeft': e.preventDefault(); step(e.shiftKey ? -1 : -STEP); break;
-    case 'ArrowRight': e.preventDefault(); step(e.shiftKey ? 1 : STEP); break;
-    case 'i': case 'I': markIn(); break;
-    case 'o': case 'O': markOut(); break;
-    case 'Enter': e.preventDefault(); addFromMarks(); break;
-    case '[': if (s) setSegEdge(s, 'start'); break;
-    case ']': if (s) setSegEdge(s, 'end'); break;
-    case 'Delete': case 'Backspace': if (s && !S.busy) removeSeg(s.id); break;
-    case 'Tab': if (S.segs.length) { e.preventDefault(); const i = S.segs.findIndex((x) => x.id === S.sel); selectSeg(S.segs[(i + (e.shiftKey ? -1 : 1) + S.segs.length) % S.segs.length].id); } break;
-    case 'l': case 'L': $('loopSeg').checked = !$('loopSeg').checked; break;
-    case 'Home': e.preventDefault(); toEdge(false); break;
-    case 'End': e.preventDefault(); toEdge(true); break;
-  }
-});
+  const combo = comboOf(e); if (!combo) return;
+  const a = ACTIONS.find((x) => x.keys.includes(combo));
+  if (!a) return;
+  e.preventDefault();
+  if (!a.any && !S.duration) return;
+  a.run(selSeg());
+}, true);
 
-renderSegs(); renderStatus(); renderResults(); layoutTimeline();
+renderSegs(); renderStatus(); renderResults(); layoutTimeline(); renderKeyHints();
 })();

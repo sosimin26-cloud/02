@@ -135,7 +135,7 @@ dd { margin: 0; word-break: break-all; }
 .track { position: relative; margin-top: 3px; }
 .track.thumbs { height: 48px; background: #0b0c0e; }
 .track.thumbs canvas { display: block; height: 48px; }
-.track.segs { height: 34px; background: #17191d; }
+.track.segs { height: 34px; background: #17191d; cursor: crosshair; }
 .seg { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #08110f; cursor: grab; overflow: hidden; border: 2px solid transparent; opacity: .85; }
 .seg.off { opacity: .35; }
 .seg.sel { border-color: #fff; opacity: 1; box-shadow: 0 0 0 1px #000; }
@@ -163,9 +163,16 @@ dd { margin: 0; word-break: break-all; }
 
 /* ---------- 기타 ---------- */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; max-width: 460px; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.keys-wrap { overflow-y: auto; min-height: 0; flex: 1; border: 1px solid var(--line); border-radius: 6px; }
+.keys { width: 100%; border-collapse: collapse; }
+.keys tr + tr td { border-top: 1px solid #24272d; }
+.keys td { padding: 5px 10px; }
+.kcell { white-space: nowrap; }
+.kacts { text-align: right; white-space: nowrap; }
+.kacts .btn { margin-left: 4px; }
+.cap { color: var(--warn); }
 .modal-box h3 { margin: 0 0 10px; }
-.keys td { padding: 3px 10px 3px 0; }
 kbd { background: var(--panel2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 11px; }
 .toast { position: fixed; bottom: 315px; left: 50%; transform: translateX(-50%); background: #2b2f37; border: 1px solid var(--line); padding: 8px 16px; border-radius: 8px; z-index: 60; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 
