@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "GIF 메이커",
+  "version": "1.0.0",
+  "description": "영상에서 여러 구간을 골라 블로그용 GIF를 한 번에 만들고 저장합니다. 모든 처리는 내 컴퓨터 안에서만 이뤄집니다.",
+  "action": { "default_title": "GIF 메이커 열기", "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" } },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "background": { "service_worker": "background.js" }
+}

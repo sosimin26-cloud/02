@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIF 메이커</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 상단 바 -->
+  <header class="topbar">
+    <div class="brand"><span class="logo">GIF</span> 메이커</div>
+    <label class="btn" title="영상 열기 (Ctrl+O)">
+      📂 영상 열기
+      <input type="file" id="fileInput" accept="video/*" hidden>
+    </label>
+    <span id="fileName" class="muted">영상을 열거나 화면에 끌어다 놓으세요</span>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="helpBtn">⌨ 단축키</button>
+    <button class="btn primary" id="buildAllBtn" disabled>⚡ 선택 구간 전부 GIF 만들기</button>
+  </header>
+
+  <!-- 왼쪽: 결과물 -->
+  <aside class="panel left">
+    <div class="panel-head">
+      <span>결과물</span>
+      <div class="head-actions">
+        <button class="btn sm" id="saveFolderBtn" disabled title="폴더를 골라 한 번에 저장 (크롬/엣지)">📁 폴더에 저장</button>
+        <button class="btn sm" id="saveZipBtn" disabled title="ZIP 하나로 다운로드">🗜 ZIP</button>
+      </div>
+    </div>
+    <div id="results" class="results">
+      <div class="empty">아직 만든 GIF가 없어요.<br>구간을 정하고 <b>GIF 만들기</b>를 누르세요.</div>
+    </div>
+  </aside>
+
+  <!-- 가운데: 뷰어 -->
+  <main class="viewer">
+    <div class="stage" id="stage">
+      <div class="drop-hint" id="dropHint">
+        <div class="big">🎬</div>
+        <div>여기에 영상을 끌어다 놓으세요</div>
+        <div class="muted">mp4 · webm · mov (브라우저에서 재생되는 형식)</div>
+      </div>
+      <div class="video-wrap" id="videoWrap" hidden>
+        <video id="video" playsinline preload="auto"></video>
+        <div id="cropBox" class="crop-box" hidden>
+          <span class="crop-label" id="cropLabel"></span>
+          <i class="h nw" data-h="nw"></i><i class="h ne" data-h="ne"></i>
+          <i class="h sw" data-h="sw"></i><i class="h se" data-h="se"></i>
+        </div>
+      </div>
+    </div>
+    <div class="transport">
+      <button class="icon" id="toStartBtn" title="구간/영상 처음 (Home)">⏮</button>
+      <button class="icon" id="stepBackBtn" title="1프레임 뒤로 (←)">◀︎|</button>
+      <button class="icon play" id="playBtn" title="재생/정지 (Space)">▶</button>
+      <button class="icon" id="stepFwdBtn" title="1프레임 앞으로 (→)">|▶︎</button>
+      <button class="icon" id="toEndBtn" title="구간/영상 끝 (End)">⏭</button>
+      <div class="timecode"><span id="curTime">00:00.00</span> / <span id="durTime">00:00.00</span></div>
+      <div class="spacer"></div>
+      <label class="chk" title="선택한 구간 안에서만 반복 재생 (L)"><input type="checkbox" id="loopSeg"> 구간 반복</label>
+      <button class="btn mark" id="markInBtn" title="시작점 표시 (I)">[ 시작 I</button>
+      <button class="btn mark" id="markOutBtn" title="끝점 표시 (O)">끝 O ]</button>
+      <button class="btn accent" id="addSegBtn" title="표시한 범위로 구간 추가 (Enter)">＋ 구간 추가</button>
+    </div>
+  </main>
+
+  <!-- 오른쪽: 설정 + 상태 -->
+  <aside class="panel right">
+    <div class="panel-head"><span>상태 확인</span><button class="btn sm ghost" id="estimateBtn" disabled>용량 다시 계산</button></div>
+    <div class="status">
+      <dl id="srcInfo">
+        <dt>원본</dt><dd>-</dd>
+      </dl>
+      <div class="sel-info">
+        <div class="sel-title">선택 구간 <b id="selLabel">-</b></div>
+        <dl>
+          <dt>길이</dt><dd id="stLen">-</dd>
+          <dt>출력 크기</dt><dd id="stSize">-</dd>
+          <dt>프레임 수</dt><dd id="stFrames">-</dd>
+          <dt>GIF 재생 시간</dt><dd id="stPlay">-</dd>
+        </dl>
+        <div class="gauge-wrap">
+          <div class="gauge-top"><span>예상 용량</span><b id="stEst">-</b></div>
+          <div class="gauge"><div id="gaugeBar"></div></div>
+          <div class="gauge-note" id="gaugeNote"></div>
+        </div>
+      </div>
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="gauge-top"><span id="progText">만드는 중…</span><button class="btn sm ghost" id="cancelBtn">취소</button></div>
+        <div class="gauge prog"><div id="progBar"></div></div>
+      </div>
+    </div>
+    <div class="panel-head"><span>GIF 설정</span><button class="btn sm ghost" id="resetSettings">초기화</button></div>
+    <div class="settings">
+      <div class="field">
+        <label>크기 (px)</label>
+        <div class="row">
+          <input type="number" id="outW" min="16" max="4000" step="1"> <span class="x">×</span>
+          <input type="number" id="outH" min="16" max="4000" step="1">
+          <button class="icon lock on" id="lockBtn" title="비율 고정">🔗</button>
+        </div>
+        <div class="chips" id="sizePresets">
+          <button data-w="0">원본</button><button data-w="860">860</button><button data-w="720">720</button>
+          <button data-w="640">640</button><button data-w="480">480</button><button data-w="360">360</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>자르기 (크롭)</label>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="cropOn"> 사용</label>
+          <select id="cropRatio">
+            <option value="free">자유</option><option value="1">1:1</option><option value="1.3333">4:3</option>
+            <option value="0.75">3:4</option><option value="1.7778">16:9</option><option value="0.5625">9:16</option>
+          </select>
+          <button class="btn sm ghost" id="cropReset">전체</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>프레임 (fps) <b id="fpsVal">12</b></label>
+        <input type="range" id="fps" min="3" max="30" step="1" value="12">
+      </div>
+      <div class="field">
+        <label>재생 속도 <b id="speedVal">1.0×</b></label>
+        <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1">
+      </div>
+      <div class="field">
+        <label>색상 수 <b id="colorsVal">256</b></label>
+        <input type="range" id="colors" min="0" max="5" step="1" value="5">
+      </div>
+      <div class="field two">
+        <div>
+          <label>팔레트</label>
+          <select id="palette">
+            <option value="global">공통 (깜빡임↓ 용량↓)</option>
+            <option value="local">프레임별 (색 정확)</option>
+          </select>
+        </div>
+        <div>
+          <label>반복</label>
+          <select id="repeat"><option value="0">무한 반복</option><option value="-1">1회 재생</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="chk" title="공통 팔레트일 때 이전 프레임과 같은 픽셀을 투명 처리해 용량을 크게 줄입니다"><input type="checkbox" id="optimize" checked> 정지 영역 압축 (용량 절약)</label>
+      </div>
+      <div class="field two">
+        <div>
+          <label>출력 방식</label>
+          <select id="mode"><option value="each">구간마다 따로</option><option value="merge">하나로 이어붙이기</option></select>
+        </div>
+        <div>
+          <label>용량 한도 (MB)</label>
+          <input type="number" id="limitMB" min="0.5" max="100" step="0.5" value="10">
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- 아래: 타임라인 -->
+  <section class="timeline-area">
+    <div class="tl-toolbar">
+      <span class="tl-title">타임라인</span>
+      <span class="muted" id="markInfo">시작 I · 끝 O 로 범위를 찍고 Enter로 구간 추가</span>
+      <div class="spacer"></div>
+      <label class="muted">확대</label>
+      <input type="range" id="zoom" min="1" max="20" step="0.5" value="1">
+    </div>
+    <div class="tl-scroll" id="tlScroll">
+      <div class="tl-inner" id="tlInner">
+        <canvas id="ruler" class="ruler" height="22"></canvas>
+        <div class="track thumbs"><canvas id="thumbs" height="48"></canvas></div>
+        <div class="track segs" id="segTrack">
+          <div class="mark-range" id="markRange" hidden></div>
+        </div>
+        <div class="playhead" id="playhead"><i></i></div>
+      </div>
+    </div>
+    <div class="seg-table-wrap">
+      <table class="seg-table">
+        <thead>
+          <tr><th class="c-chk"><input type="checkbox" id="chkAll" checked title="전체 선택"></th><th>구간</th><th>시작</th><th>끝</th><th>길이</th><th>프레임</th><th>예상 용량</th><th>상태</th><th></th></tr>
+        </thead>
+        <tbody id="segRows">
+          <tr class="empty-row"><td colspan="9">구간이 없어요. 타임라인에서 범위를 찍고 <b>＋ 구간 추가</b>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="helpModal" hidden>
+  <div class="modal-box">
+    <h3>단축키</h3>
+    <table class="keys">
+      <tr><td><kbd>Space</kbd></td><td>재생 / 정지</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>1프레임 이동 (Shift: 1초)</td></tr>
+      <tr><td><kbd>I</kbd> / <kbd>O</kbd></td><td>시작점 / 끝점 표시</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>표시한 범위로 구간 추가</td></tr>
+      <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>선택 구간의 시작 / 끝을 현재 위치로</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>선택 구간 삭제</td></tr>
+      <tr><td><kbd>Tab</kbd></td><td>다음 구간 선택</td></tr>
+      <tr><td><kbd>L</kbd></td><td>구간 반복 재생 켜기/끄기</td></tr>
+      <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>구간(또는 영상) 처음 / 끝</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>체크된 구간 전부 GIF 만들기</td></tr>
+    </table>
+    <p class="muted">타임라인: 빈 곳 클릭 = 이동, 구간 끌기 = 위치 이동, 구간 양 끝 끌기 = 길이 조절, Alt+드래그 = 새 구간 그리기</p>
+    <button class="btn" id="helpClose">닫기</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/gifenc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
